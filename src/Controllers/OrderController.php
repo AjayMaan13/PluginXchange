@@ -38,7 +38,7 @@ final class OrderController
             throw new ApiException(422, 'VALIDATION_FAILED', 'quantity must be an integer between 1 and 100');
         }
         $idempotencyKey = $body['idempotency_key'] ?? null;
-        $validKey = is_string($idempotencyKey) && $idempotencyKey !== '' && strlen($idempotencyKey) <= 64;
+        $validKey = is_string($idempotencyKey) && $idempotencyKey !== '' && mb_strlen($idempotencyKey) <= 64;
         if ($idempotencyKey !== null && !$validKey) {
             throw new ApiException(422, 'VALIDATION_FAILED', 'idempotency_key must be a string of 1-64 characters');
         }

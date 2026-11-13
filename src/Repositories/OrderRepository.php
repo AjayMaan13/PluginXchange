@@ -24,8 +24,10 @@ final class OrderRepository
              ORDER BY id LIMIT $quantity FOR UPDATE SKIP LOCKED"
         );
         $stmt->execute(['pid' => $productId]);
+        /** @var list<array{id: int|string, key_value: string}> $rows */
+        $rows = $stmt->fetchAll();
 
-        return $stmt->fetchAll();
+        return $rows;
     }
 
     public function insert(
@@ -65,7 +67,11 @@ final class OrderRepository
             ->execute([$orderId, ...$keyIds]);
     }
 
-    /** Locks the order row for the rest of the transaction. @return array{id: int|string, status: string}|null */
+    /**
+     * Locks the order row for the rest of the transaction.
+     *
+     * @return array{id: int|string, status: string}|null
+     */
     public function lockById(int $id): ?array
     {
         $stmt = Database::connection()->prepare('SELECT id, status FROM orders WHERE id = :id FOR UPDATE');
@@ -85,7 +91,7 @@ final class OrderRepository
         $pdo = Database::connection();
         $stmt = $pdo->prepare("SELECT id FROM license_keys WHERE order_id = :id AND status = 'sold' ORDER BY id");
         $stmt->execute(['id' => $orderId]);
-        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+        $ids = array_values(array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN)));
 
         $pdo->prepare("UPDATE license_keys SET status = 'revoked' WHERE order_id = :id AND status = 'sold'")
             ->execute(['id' => $orderId]);
@@ -108,10 +114,14 @@ final class OrderRepository
         );
         $stmt->execute(['id' => $orderId]);
 
-        return array_map(
-            fn(array $row) => ['id' => (int) $row['id'], 'key_value' => $row['key_value'], 'status' => $row['status']],
+        return array_values(array_map(
+            fn(array $row) => [
+                'id' => (int) $row['id'],
+                'key_value' => (string) $row['key_value'],
+                'status' => (string) $row['status'],
+            ],
             $stmt->fetchAll()
-        );
+        ));
     }
 
     /**
@@ -132,14 +142,21 @@ final class OrderRepository
         );
         $stmt->execute(['r' => $resellerId]);
 
-        $rows = array_map(function (array $row): array {
-            foreach (['id', 'product_id', 'quantity', 'unit_price_cents', 'total_cents'] as $field) {
-                $row[$field] = (int) $row[$field];
-            }
-            return $row;
-        }, $stmt->fetchAll());
+        $rows = array_values(array_map(self::formatListRow(...), $stmt->fetchAll()));
 
         return [$rows, (int) $count->fetchColumn()];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private static function formatListRow(array $row): array
+    {
+        foreach (['id', 'product_id', 'quantity', 'unit_price_cents', 'total_cents'] as $field) {
+            $row[$field] = (int) $row[$field];
+        }
+        return $row;
     }
 
     /** @return array<string, mixed>|null */

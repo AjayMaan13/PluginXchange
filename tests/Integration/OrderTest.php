@@ -117,6 +117,20 @@ final class OrderTest extends OrderTestCase
         $this->assertNotSame($first->body['data']['id'], $other->body['data']['id']);
     }
 
+    public function testIdempotencyKeyLengthCountsCharactersNotBytes(): void
+    {
+        $key = str_repeat('é', 64);
+        $ok = $this->order('A', ['product_id' => $this->productId, 'quantity' => 1, 'idempotency_key' => $key]);
+        $this->assertSame(201, $ok->status);
+
+        $tooLong = $this->order(
+            'A',
+            ['product_id' => $this->productId, 'quantity' => 1, 'idempotency_key' => $key . 'é']
+        );
+        $this->assertSame(422, $tooLong->status);
+        $this->assertSame(1, $this->countKeys('sold'));
+    }
+
     public function testReadingOrdersIsLimitedToTheOwner(): void
     {
         $id = (int) $this->order('A', ['product_id' => $this->productId, 'quantity' => 1])->body['data']['id'];

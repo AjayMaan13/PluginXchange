@@ -25,6 +25,21 @@ final class PaginationTest extends TestCase
         $this->assertSame(200, $p->offset());
     }
 
+    public function testPageBeyondTheLimitIs422InsteadOfOverflowingTheOffset(): void
+    {
+        $this->assertSame(1000000, Pagination::fromQuery(['page' => '1000000'])->page);
+
+        foreach (['1000001', '9223372036854775807'] as $page) {
+            try {
+                Pagination::fromQuery(['page' => $page]);
+                $this->fail("Expected ApiException for page $page");
+            } catch (ApiException $e) {
+                $this->assertSame(422, $e->status);
+                $this->assertStringContainsString('at most 1000000', $e->getMessage());
+            }
+        }
+    }
+
     public function testInvalidValuesAre422(): void
     {
         foreach ([['page' => '0'], ['per_page' => '-1'], ['per_page' => 'abc'], ['page' => ['1']]] as $query) {

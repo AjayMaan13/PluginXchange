@@ -20,7 +20,11 @@ final class CatalogRepository
         return (int) $stmt->fetchColumn();
     }
 
-    /** Locks the row, so call it inside a transaction. @return array<string, mixed>|null */
+    /**
+     * Locks the row, so call it inside a transaction.
+     *
+     * @return array<string, mixed>|null
+     */
     public function findProductBySkuForUpdate(string $sku): ?array
     {
         $stmt = Database::connection()->prepare(

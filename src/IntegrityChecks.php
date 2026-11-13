@@ -18,7 +18,11 @@ final class IntegrityChecks
     {
         $violations = [];
         foreach ($this->queries() as $query) {
-            foreach (Database::connection()->query($query)->fetchAll() as $row) {
+            $stmt = Database::connection()->query($query);
+            if ($stmt === false) {
+                throw new RuntimeException("Integrity query failed: $query");
+            }
+            foreach ($stmt->fetchAll() as $row) {
                 $violations[] = ['check_name' => $row['check_name'], 'id' => $row['id'], 'detail' => $row['detail']];
             }
         }
