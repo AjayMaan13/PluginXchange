@@ -10,6 +10,7 @@ services:
       DB_NAME: pluginxchange
       DB_USER: pluginxchange
       DB_PASS: pluginxchange
+      ADMIN_API_KEY: pxc_local_admin_key
     # Install dependencies on first start, then run php-fpm
     command: sh -c "[ -d vendor ] || composer install --no-interaction; exec php-fpm"
     depends_on:

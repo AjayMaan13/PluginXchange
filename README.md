@@ -15,6 +15,25 @@ make seed          # wipe the DB volume and reload schema.sql + seed.sql
 
 MySQL is also exposed on `localhost:3307` (user/password/db: `pluginxchange`).
 
+## API
+
+Every request except `/` and `/health` needs an `X-API-Key` header. Errors always look like
+`{"error": {"code", "message", "request_id"}}`, and every response carries an `X-Request-Id` header.
+
+| Endpoint | Access | Notes |
+|---|---|---|
+| `GET /api/v1/products` | any valid key | active products; filters `category`, `vendor_id`; `page`, `per_page` (max 100) |
+| `GET /api/v1/products/{id}` | any valid key | includes `available_keys` |
+| `POST /api/v1/resellers` | admin key | body `{"name", "country"}`; the new API key is returned once |
+
+```bash
+curl -H 'X-API-Key: pxc_local_reseller_1_key' 'localhost:8080/api/v1/products?category=synth&per_page=5'
+curl -H 'X-API-Key: pxc_local_reseller_1_key' localhost:8080/api/v1/products/1
+curl -X POST -H 'X-API-Key: pxc_local_admin_key' -d '{"name":"My Shop","country":"CA"}' localhost:8080/api/v1/resellers
+```
+
+The local admin key is set in `docker-compose.yml` (`ADMIN_API_KEY`).
+
 ## Seed data (local use only)
 
 3 vendors, 12 products, 353 license keys, 2 resellers.
