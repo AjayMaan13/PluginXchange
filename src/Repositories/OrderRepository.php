@@ -65,6 +65,83 @@ final class OrderRepository
             ->execute([$orderId, ...$keyIds]);
     }
 
+    /** Locks the order row for the rest of the transaction. @return array{id: int|string, status: string}|null */
+    public function lockById(int $id): ?array
+    {
+        $stmt = Database::connection()->prepare('SELECT id, status FROM orders WHERE id = :id FOR UPDATE');
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Sets the order's sold keys to revoked and returns their ids.
+     *
+     * @return list<int>
+     */
+    public function revokeKeys(int $orderId): array
+    {
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare("SELECT id FROM license_keys WHERE order_id = :id AND status = 'sold' ORDER BY id");
+        $stmt->execute(['id' => $orderId]);
+        $ids = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+        $pdo->prepare("UPDATE license_keys SET status = 'revoked' WHERE order_id = :id AND status = 'sold'")
+            ->execute(['id' => $orderId]);
+
+        return $ids;
+    }
+
+    public function setStatus(int $orderId, string $status): void
+    {
+        Database::connection()
+            ->prepare('UPDATE orders SET status = :status WHERE id = :id')
+            ->execute(['status' => $status, 'id' => $orderId]);
+    }
+
+    /** @return list<array{id: int, key_value: string, status: string}> */
+    public function keysForOrder(int $orderId): array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT id, key_value, status FROM license_keys WHERE order_id = :id ORDER BY id'
+        );
+        $stmt->execute(['id' => $orderId]);
+
+        return array_map(
+            fn(array $row) => ['id' => (int) $row['id'], 'key_value' => $row['key_value'], 'status' => $row['status']],
+            $stmt->fetchAll()
+        );
+    }
+
+    /**
+     * Newest first, without keys.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: int} rows and total count
+     */
+    public function listForReseller(int $resellerId, int $limit, int $offset): array
+    {
+        $pdo = Database::connection();
+        $count = $pdo->prepare('SELECT COUNT(*) FROM orders WHERE reseller_id = :r');
+        $count->execute(['r' => $resellerId]);
+
+        // $limit and $offset are ints validated by Pagination, so they are safe to inline
+        $stmt = $pdo->prepare(
+            "SELECT id, status, product_id, quantity, unit_price_cents, total_cents, failure_reason, created_at
+             FROM orders WHERE reseller_id = :r ORDER BY id DESC LIMIT $limit OFFSET $offset"
+        );
+        $stmt->execute(['r' => $resellerId]);
+
+        $rows = array_map(function (array $row): array {
+            foreach (['id', 'product_id', 'quantity', 'unit_price_cents', 'total_cents'] as $field) {
+                $row[$field] = (int) $row[$field];
+            }
+            return $row;
+        }, $stmt->fetchAll());
+
+        return [$rows, (int) $count->fetchColumn()];
+    }
+
     /** @return array<string, mixed>|null */
     public function find(int $id): ?array
     {

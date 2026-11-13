@@ -7,12 +7,15 @@ namespace PluginXchange\Controllers;
 use PluginXchange\Http\ApiException;
 use PluginXchange\Http\JsonResponse;
 use PluginXchange\Http\Request;
+use PluginXchange\Repositories\AuditRepository;
 use PluginXchange\Repositories\ResellerRepository;
 
 final class ResellerController
 {
-    public function __construct(private readonly ResellerRepository $resellers = new ResellerRepository())
-    {
+    public function __construct(
+        private readonly ResellerRepository $resellers = new ResellerRepository(),
+        private readonly AuditRepository $audit = new AuditRepository()
+    ) {
     }
 
     public function create(Request $request): JsonResponse
@@ -32,6 +35,8 @@ final class ResellerController
         $country = strtoupper($country);
         $apiKey = bin2hex(random_bytes(32));   // shown once; only the hash is stored
         $id = $this->resellers->create($name, $country, hash('sha256', $apiKey));
+
+        $this->audit->log('reseller', $id, 'reseller.created', ['country' => $country], $request->requestId);
 
         return new JsonResponse(201, ['data' => [
             'id' => $id,

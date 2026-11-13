@@ -6,15 +6,18 @@ namespace PluginXchange\Controllers;
 
 use PluginXchange\Http\ApiException;
 use PluginXchange\Http\JsonResponse;
+use PluginXchange\Http\Pagination;
 use PluginXchange\Http\Request;
 use PluginXchange\Repositories\OrderRepository;
+use PluginXchange\Repositories\ResellerRepository;
 use PluginXchange\Services\OrderService;
 
 final class OrderController
 {
     public function __construct(
         private readonly OrderService $service = new OrderService(),
-        private readonly OrderRepository $orders = new OrderRepository()
+        private readonly OrderRepository $orders = new OrderRepository(),
+        private readonly ResellerRepository $resellers = new ResellerRepository()
     ) {
     }
 
@@ -63,6 +66,41 @@ final class OrderController
         }
 
         return new JsonResponse(200, ['data' => $this->present($order)]);
+    }
+
+    public function cancel(Request $request): JsonResponse
+    {
+        $id = $request->params['id'] ?? '';
+        if (!ctype_digit($id)) {
+            throw new ApiException(404, 'NOT_FOUND', 'Order not found');
+        }
+
+        $order = $this->service->cancel((int) $id, $request->requestId);
+
+        return new JsonResponse(200, ['data' => $this->present($order)]);
+    }
+
+    public function forReseller(Request $request): JsonResponse
+    {
+        $id = $request->params['id'] ?? '';
+        if (!ctype_digit($id)) {
+            throw new ApiException(404, 'NOT_FOUND', 'Reseller not found');
+        }
+        $resellerId = (int) $id;
+        if ($request->role !== 'admin' && $resellerId !== $request->resellerId) {
+            throw new ApiException(403, 'FORBIDDEN', 'You can only read your own orders');
+        }
+        if (!$this->resellers->exists($resellerId)) {
+            throw new ApiException(404, 'NOT_FOUND', 'Reseller not found');
+        }
+
+        $pagination = Pagination::fromQuery($request->query);
+        [$rows, $total] = $this->orders->listForReseller($resellerId, $pagination->perPage, $pagination->offset());
+
+        return new JsonResponse(200, [
+            'data' => $rows,
+            'meta' => ['page' => $pagination->page, 'per_page' => $pagination->perPage, 'total' => $total],
+        ]);
     }
 
     /**
