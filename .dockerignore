@@ -1,0 +1,13 @@
+.git
+.github
+.claude
+.phpunit.cache
+.env
+vendor
+tests
+tools
+docs
+database
+coverage.xml
+BUILD_PLAN.md
+*.md

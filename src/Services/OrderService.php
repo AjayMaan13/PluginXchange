@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PluginXchange\Services;
 
+use Closure;
 use PDOException;
 use PluginXchange\Database;
 use PluginXchange\Domain\InsufficientStockException;
@@ -17,12 +18,22 @@ use Throwable;
 final class OrderService
 {
     private const MYSQL_DUPLICATE_ENTRY = 1062;
+    /** Tries per order when keys exist but other in-flight orders hold locks on some of them. */
+    private const MAX_ATTEMPTS = 5;
 
+    /** @var Closure(): void */
+    private readonly Closure $pause;
+
+    /** @param (Closure(): void)|null $pause called between attempts; tests pass their own (default: 5-25 ms sleep) */
     public function __construct(
         private readonly OrderRepository $orders = new OrderRepository(),
         private readonly ProductRepository $products = new ProductRepository(),
-        private readonly AuditRepository $audit = new AuditRepository()
+        private readonly AuditRepository $audit = new AuditRepository(),
+        ?Closure $pause = null
     ) {
+        $this->pause = $pause ?? static function (): void {
+            usleep(random_int(5000, 25000));
+        };
     }
 
     /**
@@ -54,6 +65,54 @@ final class OrderService
         }
         $unitPrice = $product['price_cents'];
 
+        for ($attempt = 1;; $attempt++) {
+            try {
+                $orderId = $this->fulfil($resellerId, $productId, $quantity, $unitPrice, $idempotencyKey, $requestId);
+                break;
+            } catch (InsufficientStockException $e) {
+                // SKIP LOCKED can come up short only because other in-flight orders hold locks on some keys, and
+                // they may release them (see ADR 0002). If enough keys exist, wait a moment and try again.
+                if ($attempt < self::MAX_ATTEMPTS && $this->orders->countAvailable($productId) >= $quantity) {
+                    ($this->pause)();
+                    continue;
+                }
+                $this->recordFailure($resellerId, $productId, $quantity, $unitPrice, $e, $requestId);
+                throw new ApiException(409, 'INSUFFICIENT_STOCK', $e->getMessage());
+            } catch (PDOException $e) {
+                // Two identical requests raced past the check above: return the winner's order
+                if ($idempotencyKey !== null && ($e->errorInfo[1] ?? null) === self::MYSQL_DUPLICATE_ENTRY) {
+                    $existing = $this->orders->findByIdempotencyKey($resellerId, $idempotencyKey);
+                    if ($existing !== null) {
+                        return [$existing, false];
+                    }
+                }
+                throw $e;
+            }
+        }
+
+        $order = $this->orders->find($orderId);
+        if ($order === null) {
+            throw new RuntimeException("Order $orderId vanished after commit");
+        }
+
+        return [$order, true];
+    }
+
+    /**
+     * One all-or-nothing attempt: lock the keys, write the order and its audit rows, commit.
+     * Any failure rolls everything back and is rethrown.
+     *
+     * @throws InsufficientStockException when fewer than $quantity unlocked keys are available
+     * @throws PDOException on any database error, for example a duplicate idempotency key
+     */
+    private function fulfil(
+        int $resellerId,
+        int $productId,
+        int $quantity,
+        int $unitPrice,
+        ?string $idempotencyKey,
+        string $requestId
+    ): int {
         $pdo = Database::connection();
         $pdo->beginTransaction();
         try {
@@ -90,36 +149,14 @@ final class OrderService
             }
 
             $pdo->commit();
+
+            return $orderId;
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-
-            if ($e instanceof InsufficientStockException) {
-                $this->recordFailure($resellerId, $productId, $quantity, $unitPrice, $e, $requestId);
-                throw new ApiException(409, 'INSUFFICIENT_STOCK', $e->getMessage());
-            }
-
-            // Two identical requests raced past the check above: return the winner's order
-            if (
-                $idempotencyKey !== null
-                && $e instanceof PDOException
-                && ($e->errorInfo[1] ?? null) === self::MYSQL_DUPLICATE_ENTRY
-            ) {
-                $existing = $this->orders->findByIdempotencyKey($resellerId, $idempotencyKey);
-                if ($existing !== null) {
-                    return [$existing, false];
-                }
-            }
             throw $e;
         }
-
-        $order = $this->orders->find($orderId);
-        if ($order === null) {
-            throw new RuntimeException("Order $orderId vanished after commit");
-        }
-
-        return [$order, true];
     }
 
     /**

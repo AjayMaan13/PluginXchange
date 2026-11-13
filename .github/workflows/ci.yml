@@ -92,7 +92,7 @@ jobs:
       - name: Start the API
         run: |
           PHP_CLI_SERVER_WORKERS=10 php -S 127.0.0.1:8080 -t public public/index.php > server.log 2>&1 &
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && break; sleep 1; done
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:8080/health && break; sleep 1; done
       - name: Create a reseller and run the load test
         run: |
           KEY=$(curl -sf -X POST -H "X-API-Key: $ADMIN_API_KEY" -d '{"name":"CI","country":"CA"}' \
@@ -109,4 +109,4 @@ jobs:
     needs: [test]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f docker/Dockerfile -t pluginxchange:ci .
+      - run: docker build -f docker/Dockerfile --target production -t pluginxchange:ci .
