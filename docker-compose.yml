@@ -5,6 +5,7 @@ services:
       dockerfile: docker/Dockerfile
     volumes:
       - .:/var/www/html
+      - ./docker/php-fpm-pool.conf:/usr/local/etc/php-fpm.d/zz-pool.conf:ro
     environment:
       DB_HOST: db
       DB_NAME: pluginxchange

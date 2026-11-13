@@ -35,3 +35,25 @@ SELECT id, key_value, status FROM license_keys WHERE order_id = 501;
 ```
 
 **3. Fix.** Orders are written in one transaction, so a mismatch should never happen. If it does, treat it as a bug and keep the `request_id` from the trace for the investigation. To make the reseller whole, cancel the order (`POST /api/v1/orders/501/cancel`, admin) and ask them to place it again.
+
+## 2. `make integrity` reports violations
+
+**Symptom:** `make integrity` (or the CI step) prints `VIOLATION <check_name> id=<n> <detail>` and exits 1. The script runs
+[database/integrity-checks.sql](../database/integrity-checks.sql). Every query must return zero rows.
+
+| Check | Meaning | Look at |
+|---|---|---|
+| `sold_key_without_order` | a key is `sold` but its `order_id` points at no order | the key's id in the output, `license_keys` |
+| `fulfilled_order_key_count_mismatch` | a fulfilled order has a different number of sold keys than its `quantity` | the order's trace (scenario 1) |
+| `order_total_mismatch` | `total_cents` is not `quantity * unit_price_cents` | `orders` row, then the code path that wrote it |
+| `sold_key_on_unfulfilled_order` | a key is still `sold` on a cancelled or failed order (it should be `revoked`) | the order's trace, `order.cancelled` event |
+| `available_key_with_order` | an `available` key still references an order | `license_keys` row |
+| `key_product_mismatch` | a key is attached to an order for a different product | `license_keys` and `orders` rows |
+
+**1. Find the order.** The `detail` column names it. Trace it with
+`GET /api/v1/support/orders/{id}/trace` (admin). The events show which request touched it, and the `request_id` finds the same request in the app log.
+
+**2. Decide if it is data or a bug.** Rows edited by hand in SQL are the usual cause locally. Rows written by the API are not supposed to
+break any check, because orders, cancels and imports each run in one transaction. If the API produced it, keep the `request_id` and treat it as a bug.
+
+**3. Repair.** Fix the single row with a targeted `UPDATE` (for example set the key back to `available` and clear `order_id`), then run `make integrity` again until it prints `Integrity OK`.
