@@ -29,6 +29,7 @@ Every request except `/` and `/health` needs an `X-API-Key` header. Errors alway
 | `POST /api/v1/orders/{id}/cancel` | admin key | fulfilled orders only; keys are revoked (never resold); 409 if already cancelled |
 | `GET /api/v1/resellers/{id}/orders` | reseller (own) or admin | newest first; `page`, `per_page` |
 | `GET /api/v1/support/orders/{id}/trace` | admin key | the order, its keys' status and every audit event, oldest first |
+| `POST /api/v1/catalog/import` | admin key | bulk-load a vendor's catalog (below); max 2 MB and 1000 products |
 | `POST /api/v1/resellers` | admin key | body `{"name", "country"}`; the new API key is returned once |
 
 ```bash
@@ -37,6 +38,18 @@ curl -H 'X-API-Key: pxc_local_reseller_1_key' localhost:8080/api/v1/products/1
 curl -X POST -H 'X-API-Key: pxc_local_reseller_1_key' -d '{"product_id":12,"quantity":3,"idempotency_key":"abc"}' localhost:8080/api/v1/orders
 curl -X POST -H 'X-API-Key: pxc_local_admin_key' -d '{"name":"My Shop","country":"CA"}' localhost:8080/api/v1/resellers
 ```
+
+### Catalog import
+
+```bash
+curl -X POST -H 'X-API-Key: pxc_local_admin_key' --data-binary @tests/fixtures/partial-bad.json localhost:8080/api/v1/catalog/import
+```
+
+Body: `{"vendor": "...", "products": [{"sku", "name", "category", "price_cents", "keys": [...]}]}`. Products are upserted by SKU
+(the vendor is created if new) and keys that already exist are skipped, so re-running a file changes nothing. Each product is
+its own transaction. Bad rows are rejected with reasons and the rest still import:
+`{"data": {"products_created", "products_updated", "keys_added", "rejected": [{"index", "sku", "errors": [...]}]}}`.
+Keys are 4-64 characters (letters, digits, `_`, `-`); a key that already belongs to another product rejects that product.
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for support scenarios.
 

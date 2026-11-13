@@ -49,6 +49,11 @@ final class Request
         );
     }
 
+    public function bodySize(): int
+    {
+        return strlen($this->body);
+    }
+
     public function header(string $name): ?string
     {
         return $this->headers[strtolower($name)] ?? null;

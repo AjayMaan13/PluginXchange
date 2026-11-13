@@ -1,0 +1,13 @@
+{
+  "vendor": "Fixture Audio",
+  "products": [
+    { "sku": "FIX-SYN-001", "name": "Good Synth", "category": "synth", "price_cents": 4999,
+      "keys": ["PB-0001", "PB-0002"] },
+    { "sku": "FIX-FX-009", "name": "Free Reverb", "category": "effect", "price_cents": 0, "keys": ["PB-0010"] },
+    { "sku": "FIX-FX-010", "name": "Toaster", "category": "toaster", "price_cents": 1000, "keys": [] },
+    { "sku": "FIX-FX-011", "category": "effect", "price_cents": 1000, "keys": ["ab"] },
+    { "sku": "FIX-FX-012", "name": "Reused Key", "category": "effect", "price_cents": 1000, "keys": ["PB-0002"] },
+    { "sku": "FIX-FX-013", "name": "Good Delay", "category": "effect", "price_cents": 1500, "keys": ["PB-0003"] },
+    "not a product"
+  ]
+}
