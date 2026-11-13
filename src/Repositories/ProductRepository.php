@@ -40,7 +40,9 @@ final class ProductRepository
         );
         $stmt->execute($params);
 
-        return [array_map(fn(array $row) => self::format($row), $stmt->fetchAll()), (int) $count->fetchColumn()];
+        $rows = array_values(array_map(fn(array $row) => self::format($row), $stmt->fetchAll()));
+
+        return [$rows, (int) $count->fetchColumn()];
     }
 
     /** @return array<string, mixed>|null */

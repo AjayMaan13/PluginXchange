@@ -24,6 +24,7 @@ final class JsonResponse
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
-        echo json_encode($this->body, JSON_UNESCAPED_SLASHES);
+        // Substitute invalid UTF-8 instead of letting json_encode return false and send an empty body
+        echo json_encode($this->body, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 }

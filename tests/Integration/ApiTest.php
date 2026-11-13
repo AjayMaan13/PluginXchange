@@ -176,6 +176,13 @@ final class ApiTest extends TestCase
         $this->assertError($r, 422, 'VALIDATION_FAILED');
     }
 
+    public function testHugePageNumberIs422NotAServerError(): void
+    {
+        $r = $this->call('GET', '/api/v1/products', ['page' => '9223372036854775807'], $this->asReseller());
+        $this->assertError($r, 422, 'VALIDATION_FAILED');
+        $this->assertStringContainsString('at most', $r->body['error']['message']);
+    }
+
     public function testProductDetailIncludesAvailableKeys(): void
     {
         $r = $this->call('GET', "/api/v1/products/$this->synthId", [], $this->asReseller());

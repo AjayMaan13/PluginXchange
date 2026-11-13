@@ -104,6 +104,18 @@ final class SupportOpsTest extends OrderTestCase
         $this->assertSame(422, $r->status);
     }
 
+    public function testHistoryWithAHugePageNumberIs422(): void
+    {
+        $r = $this->call(
+            'GET',
+            "/api/v1/resellers/$this->resellerA/orders",
+            'A',
+            ['page' => '9223372036854775807']
+        );
+
+        $this->assertSame(422, $r->status);
+    }
+
     public function testTraceExplainsAFailedOrder(): void
     {
         $r = $this->call('POST', '/api/v1/orders', 'A', [], ['product_id' => $this->productId, 'quantity' => 8]);

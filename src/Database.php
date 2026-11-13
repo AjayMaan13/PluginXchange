@@ -38,7 +38,9 @@ final class Database
     public static function ping(): bool
     {
         try {
-            return (int) self::connection()->query('SELECT 1')->fetchColumn() === 1;
+            $stmt = self::connection()->query('SELECT 1');
+
+            return $stmt !== false && (int) $stmt->fetchColumn() === 1;
         } catch (Throwable $e) {
             error_log('DB ping failed: ' . $e->getMessage());
             return false;

@@ -31,12 +31,14 @@ Automated cases name the test class that covers them.
 | HTTP-02 | HTTP core | Unexpected failure never leaks details | Force an exception inside a handler | 500 `INTERNAL_ERROR`, generic message, `request_id` present, no stack trace | Y (ApiTest) | Pass |
 | HTTP-03 | HTTP core | Every error has the standard shape | Trigger any error (for example 401) | `{"error": {"code", "message", "request_id"}}`, `request_id` is 16 hex characters and equals the `X-Request-Id` header | Y (ApiTest) | Pass |
 | HTTP-04 | HTTP core | Database is down | `docker compose stop db`, then `GET /health` and an authenticated call | `/health` 503 `{"status":"degraded","db":"down"}`, API call 500 generic `INTERNAL_ERROR`; both recover after `docker compose start db` | N (manual) | Pass |
+| HTTP-05 | HTTP core | Request parsing | Method, path (trailing slash dropped), query and headers from the PHP globals; JSON bodies that are empty, a list, a string, `null` or broken | Parsed values; 400 `BAD_JSON` for anything that is not an object | Y (RequestTest) | Pass |
 | CAT-01 | Catalog | List active products | `GET /api/v1/products` | 200, only active products | Y (ApiTest) | Pass |
 | CAT-02 | Catalog | Filter by category | `?category=synth` | Only synth products | Y (ApiTest) | Pass |
 | CAT-03 | Catalog | Invalid filters | `?category=toaster`, `?vendor_id=abc`, `?page=0` | 422 `VALIDATION_FAILED` | Y (ApiTest, PaginationTest) | Pass |
 | CAT-04 | Catalog | Pagination | `?page=2&per_page=5`, `per_page=500` | Correct slice and `meta`; `per_page` capped at 100 | Y (ApiTest, PaginationTest) | Pass |
 | CAT-05 | Catalog | Product detail | `GET /api/v1/products/12` | 200 with `available_keys` | Y (ApiTest) | Pass |
 | CAT-06 | Catalog | Unknown product | `GET /api/v1/products/99999` | 404 `NOT_FOUND` | Y (ApiTest) | Pass |
+| CAT-07 | Catalog | Page number beyond the limit | `?page=9223372036854775807` on the products list and on a reseller's history | 422 `VALIDATION_FAILED` "page must be at most 1000000", not a 500 (found in the Phase 7 review) | Y (PaginationTest, ApiTest, SupportOpsTest) | Pass |
 | RES-01 | Resellers | Create a reseller | `POST /api/v1/resellers` as admin | 201, `api_key` returned once; only its SHA-256 hash is stored | Y (ApiTest) | Pass |
 | RES-02 | Resellers | Validation and bad JSON | Missing name, bad country, broken JSON | 422 / 400 | Y (ApiTest) | Pass |
 | ORD-01 | Orders | Happy path | Reseller orders 2 keys of a product | 201 `fulfilled`, 2 distinct keys, keys marked sold, audit events written | Y (OrderTest) | Pass |
@@ -47,6 +49,7 @@ Automated cases name the test class that covers them.
 | ORD-06 | Orders | Idempotent retry | Send the same `idempotency_key` twice | Second call 200, same order and keys, no extra stock sold | Y (OrderTest) | Pass |
 | ORD-07 | Orders | Read access | Reseller B reads reseller A's order; admin reads it | 403 for B, 200 for admin | Y (OrderTest) | Pass |
 | ORD-08 | Orders | Failure mid-transaction | Pass an oversized request id so the audit insert fails after the keys were marked sold | Everything rolled back: no key sold, no order row, no open transaction | Y (OrderTest) | Pass |
+| ORD-09 | Orders | Idempotency key length counts characters | Key of 64 `é` (128 bytes), then 65 characters | 201, then 422 | Y (OrderTest) | Pass |
 | SUP-01 | Support | Cancel a fulfilled order | `POST /api/v1/orders/{id}/cancel` as admin | 200 `cancelled`, keys `revoked` (never resold), audit events | Y (SupportOpsTest) | Pass |
 | SUP-02 | Support | Cancel twice | Cancel the same order again | 409 `ALREADY_CANCELLED` | Y (SupportOpsTest) | Pass |
 | SUP-03 | Support | Cancel rejects bad targets | Failed order, missing order, reseller key | 409 `NOT_CANCELLABLE`, 404, 403 | Y (SupportOpsTest) | Pass |
