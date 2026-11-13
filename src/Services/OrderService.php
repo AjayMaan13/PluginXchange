@@ -74,6 +74,11 @@ final class OrderService
             $keyIds = array_map(fn(array $key) => (int) $key['id'], $keys);
             $this->orders->markKeysSold($keyIds, $orderId);
 
+            $this->audit->log('order', $orderId, 'order.requested', [
+                'product_id' => $productId,
+                'quantity' => $quantity,
+                'idempotency_key' => $idempotencyKey,
+            ], $requestId);
             $this->audit->log('order', $orderId, 'order.fulfilled', [
                 'reseller_id' => $resellerId,
                 'product_id' => $productId,
@@ -117,6 +122,50 @@ final class OrderService
         return [$order, true];
     }
 
+    /**
+     * Cancels a fulfilled order and revokes its keys, all or nothing.
+     *
+     * @return array<string, mixed> the updated order
+     */
+    public function cancel(int $orderId, string $requestId): array
+    {
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $row = $this->orders->lockById($orderId);
+            if ($row === null) {
+                throw new ApiException(404, 'NOT_FOUND', 'Order not found');
+            }
+            if ($row['status'] === 'cancelled') {
+                throw new ApiException(409, 'ALREADY_CANCELLED', 'Order is already cancelled');
+            }
+            if ($row['status'] !== 'fulfilled') {
+                throw new ApiException(409, 'NOT_CANCELLABLE', 'Only fulfilled orders can be cancelled');
+            }
+
+            $keyIds = $this->orders->revokeKeys($orderId);
+            $this->orders->setStatus($orderId, 'cancelled');
+
+            $this->audit->log('order', $orderId, 'order.cancelled', ['revoked_keys' => count($keyIds)], $requestId);
+            foreach ($keyIds as $keyId) {
+                $this->audit->log('license_key', $keyId, 'key.revoked', ['order_id' => $orderId], $requestId);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $order = $this->orders->find($orderId);
+        if ($order === null) {
+            throw new RuntimeException("Order $orderId vanished after commit");
+        }
+
+        return $order;
+    }
+
     /** Runs after the main transaction rolled back, so the failure trace is not lost with it. */
     private function recordFailure(
         int $resellerId,
@@ -139,6 +188,10 @@ final class OrderService
                 $e->getMessage(),
                 null
             );
+            $this->audit->log('order', $orderId, 'order.requested', [
+                'product_id' => $productId,
+                'quantity' => $quantity,
+            ], $requestId);
             $this->audit->log('order', $orderId, 'order.failed', [
                 'reseller_id' => $resellerId,
                 'product_id' => $productId,

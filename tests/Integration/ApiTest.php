@@ -220,6 +220,12 @@ final class ApiTest extends TestCase
         $this->assertSame(hash('sha256', $data['api_key']), $row['api_key_hash']);
         $this->assertStringNotContainsString($data['api_key'], json_encode($row));
 
+        $audit = $this->pdo->query(
+            "SELECT request_id FROM audit_log WHERE entity_type = 'reseller' AND entity_id = {$data['id']}
+             AND event = 'reseller.created'"
+        )->fetchColumn();
+        $this->assertSame($r->headers['X-Request-Id'], $audit);
+
         // The new key works right away
         $this->assertSame(
             200,

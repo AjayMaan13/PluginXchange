@@ -20,6 +20,14 @@ final class ResellerRepository
         return $row === false ? null : $row;
     }
 
+    public function exists(int $id): bool
+    {
+        $stmt = Database::connection()->prepare('SELECT 1 FROM resellers WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+
+        return $stmt->fetchColumn() !== false;
+    }
+
     public function create(string $name, string $country, string $keyHash): int
     {
         $pdo = Database::connection();
