@@ -140,3 +140,34 @@ docker compose start db            # then: curl localhost:8080/health
 ```
 
 The app opens its database connection per request, so it starts without the database and recovers on its own once the database is back, with no restart. Check `DB_HOST`, `DB_PORT`, `DB_USER` and `DB_PASS` in the app's environment if the database is up but the app still cannot reach it (inside Docker the host is `db`, not `localhost`).
+
+## 7. `INSUFFICIENT_STOCK`, but the product shows keys
+
+**Symptom:** a reseller got `409 INSUFFICIENT_STOCK` ("Only 2 license keys available, 3 requested"), but `GET /api/v1/products/12` shows `available_keys: 4`.
+
+**1. Trace the failed order** (admin). Its `order.failed` event records what the order saw:
+
+```bash
+curl -H 'X-API-Key: pxc_local_admin_key' localhost:8080/api/v1/support/orders/501/trace
+```
+
+`detail.available` is the number of unlocked keys at that moment and `detail.requested` is what was asked for.
+
+**2. Work out which case it is.**
+
+```sql
+-- Keys by status for the product, now
+SELECT status, COUNT(*) FROM license_keys WHERE product_id = 12 GROUP BY status;
+
+-- What else happened to the product around the failure
+SELECT id, status, quantity, created_at FROM orders WHERE product_id = 12 ORDER BY id DESC LIMIT 20;
+```
+
+- **Stock really ran out, then keys came back:** orders just before the failed one sold the keys. `available_keys` was higher later only if an import added keys. Nothing is wrong.
+- **Keys are `revoked`, not `available`:** cancelling an order revokes its keys and they are never resold, so cancellations do not restock the product.
+- **Lock contention:** other orders for the same product were in flight and held locks on some keys. This is the subtle case. The order now retries up to 5 times (5-25 ms apart) when a plain count shows enough keys, so it only fails falsely if the other orders hold their locks for longer than about 75 ms.
+
+**Worked example (found and fixed in Phase 8).** The release image runs Apache with many parallel workers. Running `make loadtest` against it, roughly one run in ten failed its own check: "19 order(s) failed as out of stock although 4 keys were left". Two orders had each locked 2 of the last 4 keys, each saw fewer than the 3 it needed, and both failed, leaving 4 unsold. It never showed up with php-fpm and 25 workers, because that setup does not overlap enough requests. The fix, recorded in [ADR 0002](adr/0002-skip-locked-key-allocation.md), is the bounded retry. After it, 90 runs against the production image had zero false failures.
+
+**3. Fix.** Failed orders store no idempotency key, so the reseller can retry the same request (with the same `idempotency_key`) and it will succeed if the keys are there.
+

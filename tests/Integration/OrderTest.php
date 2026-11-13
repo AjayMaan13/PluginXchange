@@ -6,6 +6,8 @@ namespace PluginXchange\Tests\Integration;
 
 use PDO;
 use PDOException;
+use PluginXchange\Database;
+use PluginXchange\Http\ApiException;
 use PluginXchange\Services\OrderService;
 
 final class OrderTest extends OrderTestCase
@@ -129,6 +131,110 @@ final class OrderTest extends OrderTestCase
         );
         $this->assertSame(422, $tooLong->status);
         $this->assertSame(1, $this->countKeys('sold'));
+    }
+
+    /**
+     * Another connection that locks the product's first $count keys, the way an in-flight order would.
+     * The caller must roll it back (tearDown would otherwise wait on its locks).
+     */
+    private function holdLocksOnKeys(int $count): PDO
+    {
+        $other = new PDO(
+            Database::dsn(),
+            getenv('DB_USER') ?: 'pluginxchange',
+            getenv('DB_PASS') ?: 'pluginxchange',
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        $other->beginTransaction();
+        $other->query(
+            "SELECT id FROM license_keys WHERE product_id = $this->productId AND status = 'available'
+             ORDER BY id LIMIT $count FOR UPDATE"
+        )->fetchAll();
+
+        return $other;
+    }
+
+    public function testOrderRetriesWhenAnotherOrderHoldsLocksThatGetReleased(): void
+    {
+        // 5 keys, 3 locked by an in-flight order: an order for 3 sees only 2 unlocked keys
+        $other = $this->holdLocksOnKeys(3);
+        $pauses = 0;
+        $service = new OrderService(pause: function () use ($other, &$pauses): void {
+            $pauses++;
+            $other->rollBack();   // the other order failed or finished, its locks are gone
+        });
+
+        try {
+            [$order, $created] = $service->place($this->resellerA, $this->productId, 3, null, 'retry-test-1');
+        } finally {
+            if ($other->inTransaction()) {
+                $other->rollBack();
+            }
+        }
+
+        $this->assertTrue($created);
+        $this->assertSame('fulfilled', $order['status']);
+        $this->assertCount(3, $order['keys']);
+        $this->assertSame(1, $pauses);
+        $this->assertSame(3, $this->countKeys('sold'));
+        $this->assertSame(
+            0,
+            (int) $this->pdo->query(
+                "SELECT COUNT(*) FROM orders WHERE product_id = $this->productId AND status = 'failed'"
+            )->fetchColumn()
+        );
+    }
+
+    public function testRealShortageFailsAtOnceWithoutRetrying(): void
+    {
+        $pauses = 0;
+        $service = new OrderService(pause: function () use (&$pauses): void {
+            $pauses++;
+        });
+
+        try {
+            $service->place($this->resellerA, $this->productId, 8, null, 'retry-test-2');
+            $this->fail('Expected INSUFFICIENT_STOCK');
+        } catch (ApiException $e) {
+            $this->assertSame(409, $e->status);
+            $this->assertSame('INSUFFICIENT_STOCK', $e->errorCode);
+        }
+
+        $this->assertSame(0, $pauses);   // only 5 keys exist, so waiting cannot help
+        $this->assertSame(5, $this->countKeys('available'));
+        $this->assertSame(
+            1,
+            (int) $this->pdo->query(
+                "SELECT COUNT(*) FROM orders WHERE product_id = $this->productId AND status = 'failed'"
+            )->fetchColumn()
+        );
+    }
+
+    public function testRetriesAreBoundedWhenTheLocksNeverGoAway(): void
+    {
+        $other = $this->holdLocksOnKeys(3);
+        $pauses = 0;
+        $service = new OrderService(pause: function () use (&$pauses): void {
+            $pauses++;
+        });
+
+        try {
+            $service->place($this->resellerA, $this->productId, 3, null, 'retry-test-3');
+            $this->fail('Expected INSUFFICIENT_STOCK');
+        } catch (ApiException $e) {
+            $this->assertSame('INSUFFICIENT_STOCK', $e->errorCode);
+        } finally {
+            $other->rollBack();
+        }
+
+        $this->assertSame(4, $pauses);   // 5 attempts, 4 pauses between them
+        $this->assertSame(5, $this->countKeys('available'));
+        $this->assertSame(
+            1,
+            (int) $this->pdo->query(
+                "SELECT COUNT(*) FROM orders WHERE product_id = $this->productId AND status = 'failed'"
+            )->fetchColumn()
+        );
     }
 
     public function testReadingOrdersIsLimitedToTheOwner(): void

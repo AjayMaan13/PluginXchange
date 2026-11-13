@@ -50,6 +50,9 @@ Automated cases name the test class that covers them.
 | ORD-07 | Orders | Read access | Reseller B reads reseller A's order; admin reads it | 403 for B, 200 for admin | Y (OrderTest) | Pass |
 | ORD-08 | Orders | Failure mid-transaction | Pass an oversized request id so the audit insert fails after the keys were marked sold | Everything rolled back: no key sold, no order row, no open transaction | Y (OrderTest) | Pass |
 | ORD-09 | Orders | Idempotency key length counts characters | Key of 64 `é` (128 bytes), then 65 characters | 201, then 422 | Y (OrderTest) | Pass |
+| ORD-10 | Orders | Keys exist but another in-flight order holds locks on some | A second connection locks 3 of 5 keys, the order asks for 3, the locks are released while it waits | The order retries and is `fulfilled`, no failed order recorded | Y (OrderTest) | Pass |
+| ORD-11 | Orders | Real shortage does not wait | Ask for 8 keys when only 5 exist | 409 at once, no retry, one failed order recorded | Y (OrderTest) | Pass |
+| ORD-12 | Orders | Retries are bounded | Another connection holds its locks for good | 5 attempts (4 pauses), then 409 `INSUFFICIENT_STOCK` and one failed order recorded | Y (OrderTest) | Pass |
 | SUP-01 | Support | Cancel a fulfilled order | `POST /api/v1/orders/{id}/cancel` as admin | 200 `cancelled`, keys `revoked` (never resold), audit events | Y (SupportOpsTest) | Pass |
 | SUP-02 | Support | Cancel twice | Cancel the same order again | 409 `ALREADY_CANCELLED` | Y (SupportOpsTest) | Pass |
 | SUP-03 | Support | Cancel rejects bad targets | Failed order, missing order, reseller key | 409 `NOT_CANCELLABLE`, 404, 403 | Y (SupportOpsTest) | Pass |
@@ -80,6 +83,7 @@ Automated cases name the test class that covers them.
 | CON-05 | Concurrency | Idempotent replay | Replay one finished order's key | Same order and keys, stock unchanged | Y (loadtest) | Pass |
 | CON-06 | Concurrency | Same key, 10 requests at once | Fire 10 identical requests in parallel | One order, same keys for all, stock down once | Y (loadtest) | Pass |
 | CON-07 | Concurrency | Integrity after load | `make integrity` after the load test | 0 rows | Y (`make loadtest`, CI) | Pass |
+| CON-08 | Concurrency | No false out-of-stock at the tail of the stock | `make loadtest` against the production image (Apache): after each run, if any order failed, fewer keys than the quantity must be left | 0 violations in 90 runs after the retry fix (about 1 run in 10 failed before it) | Y (loadtest) | Pass |
 | NET-01 | .NET client | JSON models | Parse order, product, product page, trace | Fields mapped from snake_case | Y (PluginXchangeClientTests, 4 tests) | Pass |
 | NET-02 | .NET client | API key header | Two requests through a fake handler | `X-API-Key` on both | Y (PluginXchangeClientTests) | Pass |
 | NET-03 | .NET client | Error mapping | 401, 409, 422 and a non-JSON body | `UnauthorizedApiException`, `ConflictApiException`, `ValidationApiException`, `ApiException` `HTTP_413` | Y (PluginXchangeClientTests, 4 tests) | Pass |
@@ -87,3 +91,5 @@ Automated cases name the test class that covers them.
 | NET-05 | .NET client | No retry on client errors; retries are capped | 409 / 422; endless 502 | One request; stops after `MaxRetries` | Y (PluginXchangeClientTests, 2 tests) | Pass |
 | NET-06 | .NET client | Idempotency key generated | Place an order without a key | 32-character key sent | Y (PluginXchangeClientTests) | Pass |
 | OPS-01 | Smoke | End-to-end smoke | `make smoke` | health, list, place and fetch one order all PASS, exit 0 | N (manual and pipeline) | Pass |
+| OPS-02 | Release image | Production image contents | Build the `production` target, run it, inspect it | Runs as `www-data` (not root), no `tests/` or `vendor/phpunit`, no `X-Powered-By` header, `composer.json`, `src/` and `vendor/` not reachable over HTTP, health check turns `healthy` | N (manual here, the release workflow checks non-root and dev files) | Pass |
+| OPS-03 | Release image | API works through Apache | Run the image against the dev database, then `make smoke` and `make loadtest` with the image's URL | Routing, 401/404/405 JSON errors, smoke OK, load test 0 duplicates and 0 violations | N (manual here, the release workflow runs smoke and a short load test) | Pass |

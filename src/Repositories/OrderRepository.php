@@ -30,6 +30,17 @@ final class OrderRepository
         return $rows;
     }
 
+    /** Plain read: counts keys other in-flight orders may have locked, unlike lockAvailableKeys(). */
+    public function countAvailable(int $productId): int
+    {
+        $stmt = Database::connection()->prepare(
+            "SELECT COUNT(*) FROM license_keys WHERE product_id = :pid AND status = 'available'"
+        );
+        $stmt->execute(['pid' => $productId]);
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public function insert(
         int $resellerId,
         int $productId,

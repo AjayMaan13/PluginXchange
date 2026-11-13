@@ -124,12 +124,49 @@ make smoke         # health, list, place and fetch one order
 - CI (`.github/workflows/ci.yml`) runs lint, static analysis, the PHP tests with coverage, the integrity checks, the .NET tests and a
   load test on every push.
 
+## Releasing
+
+The release image is built from the `production` target of `docker/Dockerfile`: one container (Apache + PHP, no dev packages, no
+tests, runs as a non-root user on port 8080) that serves the API itself. The `dev` target is the php-fpm image that
+`docker compose` uses locally.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Pushing a tag starts `.github/workflows/deploy.yml`:
+
+| Stage | What it does |
+|---|---|
+| `build-and-push` | builds the production image and pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:v0.1.0` and `:sha-<commit>` (lowercase) |
+| `smoke-test` | starts that exact image (by digest) next to a MySQL service, checks it runs as non-root without dev files, then runs the .NET `smoke` command and a short `loadtest` against it |
+| `promote-latest` | only if the smoke test passed: points `:latest` at the image |
+| `deploy` | waits for approval on the `production` environment, then deploys (the AWS deploy is added in Phase 9) |
+
+One-time setup in GitHub: Settings > Environments > New environment > `production`, then add yourself under *Required reviewers*.
+The workflow can also be started by hand from the Actions tab; that publishes only the `sha-` tag and skips `promote-latest` and `deploy`.
+
+Run a published image yourself (the database must already have the schema; see `database/schema.sql`):
+
+```bash
+docker run -p 8080:8080 -e DB_HOST=... -e DB_NAME=... -e DB_USER=... -e DB_PASS=... -e ADMIN_API_KEY=... \
+  ghcr.io/<owner>/<repo>:v0.1.0
+```
+
+**Rollback.** Every release is an immutable, tagged image and the database schema has no migrations to undo, so rolling back
+means running the previous tag. Redeploy `ghcr.io/<owner>/<repo>:v0.0.9` (the last good version), and if `latest` should follow:
+
+```bash
+docker buildx imagetools create -t ghcr.io/<owner>/<repo>:latest ghcr.io/<owner>/<repo>:v0.0.9
+```
+
 ## Documentation
 
 | | |
 |---|---|
 | [docs/api.md](docs/api.md) | every endpoint with examples, validation rules and error codes |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | six support scenarios: symptom, how to investigate, fix |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | seven support scenarios: symptom, how to investigate, fix |
 | [docs/test-cases.md](docs/test-cases.md) | the test case table |
 | [docs/adr/](docs/adr/) | design decisions: no framework, SKIP LOCKED key allocation, money as integer cents, API-key hashing |
 
@@ -147,7 +184,8 @@ src/Controllers/     input validation and response shaping
 src/Services/        order and import rules, transactions
 src/Repositories/    all SQL (prepared statements only)
 database/            schema.sql, seed.sql, integrity-checks.sql
-docker/              Dockerfile, nginx and php-fpm config
+docker/              Dockerfile (dev and production targets), nginx, php-fpm and Apache config
+.github/workflows/   ci.yml (every push) and deploy.yml (release on a v* tag)
 tests/               PHPUnit: Unit/ and Integration/, fixtures/
 tools/               .NET client, CLI and tests
 docs/                API reference, troubleshooting, test cases, ADRs
