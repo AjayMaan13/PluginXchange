@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PluginXchange;
 
+use PluginXchange\Controllers\ImportController;
 use PluginXchange\Controllers\OrderController;
 use PluginXchange\Controllers\ProductController;
 use PluginXchange\Controllers\SupportController;
@@ -68,6 +69,7 @@ final class App
         $resellers = new ResellerController();
         $orders = new OrderController();
         $support = new SupportController();
+        $import = new ImportController();
 
         $this->router->add('GET', '/', fn() => new JsonResponse(200, ['status' => 'ok']), Route::PUBLIC);
         $this->router->add('GET', '/health', function (): JsonResponse {
@@ -83,6 +85,7 @@ final class App
         $this->router->add('POST', '/api/v1/orders/{id}/cancel', $orders->cancel(...), Route::ADMIN);
         $this->router->add('GET', '/api/v1/resellers/{id}/orders', $orders->forReseller(...));
         $this->router->add('GET', '/api/v1/support/orders/{id}/trace', $support->trace(...), Route::ADMIN);
+        $this->router->add('POST', '/api/v1/catalog/import', $import->import(...), Route::ADMIN);
         $this->router->add('POST', '/api/v1/resellers', $resellers->create(...), Route::ADMIN);
     }
 }

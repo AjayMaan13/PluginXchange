@@ -1,0 +1,11 @@
+{
+  "vendor": "Fixture Audio",
+  "products": [
+    { "sku": "FIX-SYN-001", "name": "Fixture Synth", "category": "synth", "price_cents": 4999,
+      "keys": ["FIX-SYN-0001", "FIX-SYN-0002", "FIX-SYN-0003"] },
+    { "sku": "FIX-FX-001", "name": "Fixture Reverb", "category": "effect", "price_cents": 2999,
+      "keys": ["FIX-FX-0001", "FIX-FX-0002"] },
+    { "sku": "FIX-PACK-001", "name": "Fixture Drums", "category": "sample_pack", "price_cents": 1999,
+      "keys": ["FIX-PACK-0001", "FIX-PACK-0002"] }
+  ]
+}
