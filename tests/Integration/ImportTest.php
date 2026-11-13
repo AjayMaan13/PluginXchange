@@ -10,6 +10,7 @@ use PluginXchange\App;
 use PluginXchange\Database;
 use PluginXchange\Http\JsonResponse;
 use PluginXchange\Http\Request;
+use PluginXchange\IntegrityChecks;
 
 /**
  * Imports commit real rows (one transaction per product), so these tests clean up the vendors named
@@ -103,6 +104,15 @@ final class ImportTest extends TestCase
             $r->body['data']
         );
         $this->assertSame($before, $this->snapshot());
+    }
+
+    public function testIntegrityChecksPassAfterImports(): void
+    {
+        $this->import($this->fixture('valid.json'));
+        $this->import($this->fixture('partial-bad.json'));
+        $this->import($this->fixture('duplicate-keys.json'));
+
+        $this->assertSame([], (new IntegrityChecks())->run());
     }
 
     public function testExistingProductsAreUpdatedAndKnownKeysSkipped(): void

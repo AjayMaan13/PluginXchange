@@ -11,6 +11,11 @@ curl localhost:8080/health    # {"status":"ok","db":"up"}
 make test          # PHPUnit inside the app container
 make lint          # phpcs (PSR-12) + phpstan (level 5)
 make seed          # wipe the DB volume and reload schema.sql + seed.sql
+make integrity     # database consistency checks (must print "Integrity OK")
+make coverage      # PHPUnit with a line-coverage report
+make dotnet-test   # .NET client tests (runs in the dotnet SDK Docker image)
+make loadtest      # parallel orders against the running API, then make integrity
+make smoke         # health, list, place and fetch one order
 ```
 
 MySQL is also exposed on `localhost:3307` (user/password/db: `pluginxchange`).
@@ -52,6 +57,26 @@ its own transaction. Bad rows are rejected with reasons and the rest still impor
 Keys are 4-64 characters (letters, digits, `_`, `-`); a key that already belongs to another product rejects that product.
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for support scenarios.
+
+## Testing and hardening
+
+Every test case is listed in [docs/test-cases.md](docs/test-cases.md).
+
+- **PHP tests:** `make test` (unit and integration, against the Docker MySQL). `make coverage` prints line coverage per class.
+- **Integrity checks:** `database/integrity-checks.sql` holds queries that must return zero rows (sold keys without an order,
+  key count vs quantity, order totals, keys left `sold` on cancelled orders, and more). `make integrity` runs them and fails on any row.
+- **.NET tools** (`tools/`): `PluginXchange.Client` is a typed `HttpClient` wrapper (retries transient failures and keeps the
+  idempotency key across retries), `PluginXchange.Cli` has two commands, and `PluginXchange.Client.Tests` is the xUnit suite.
+  The Makefile runs them in the official SDK image, so no local .NET install is needed. With a local SDK use
+  `dotnet test tools/PluginXchange.sln` and `dotnet run --project tools/PluginXchange.Cli -- <command>`.
+- **Load test:** `make loadtest ARGS="--orders 50 --qty 3 --runs 10"` fires the orders in parallel. Each run imports its own product
+  with 100 keys (use `--keys N` to change that, or `--product ID` to hit an existing product). Per run it checks that no key was handed out
+  twice, fulfilled + failed equals the orders sent, no more keys were sold than existed, stock went down by exactly what was sold,
+  an idempotency-key replay returns the same keys, and 10 simultaneous requests with one idempotency key make exactly one order.
+  It exits non-zero on any violation, then `make integrity` checks the database side. Runs leave their products behind, so use `make seed` to reset.
+- **Smoke test:** `make smoke` (or `smoke --base-url https://... --api-key ... ` from the CLI) for a quick end-to-end check.
+
+For the load test, `docker/php-fpm-pool.conf` raises php-fpm from 5 to 25 workers (local Docker only) so requests really overlap.
 
 The local admin key is set in `docker-compose.yml` (`ADMIN_API_KEY`).
 
