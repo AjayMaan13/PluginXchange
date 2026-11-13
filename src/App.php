@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PluginXchange;
 
+use PluginXchange\Controllers\OrderController;
 use PluginXchange\Controllers\ProductController;
 use PluginXchange\Controllers\ResellerController;
 use PluginXchange\Http\ApiException;
@@ -64,6 +65,7 @@ final class App
     {
         $products = new ProductController();
         $resellers = new ResellerController();
+        $orders = new OrderController();
 
         $this->router->add('GET', '/', fn() => new JsonResponse(200, ['status' => 'ok']), Route::PUBLIC);
         $this->router->add('GET', '/health', function (): JsonResponse {
@@ -74,6 +76,8 @@ final class App
 
         $this->router->add('GET', '/api/v1/products', $products->index(...));
         $this->router->add('GET', '/api/v1/products/{id}', $products->show(...));
+        $this->router->add('POST', '/api/v1/orders', $orders->create(...));
+        $this->router->add('GET', '/api/v1/orders/{id}', $orders->show(...));
         $this->router->add('POST', '/api/v1/resellers', $resellers->create(...), Route::ADMIN);
     }
 }
