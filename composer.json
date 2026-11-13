@@ -1,0 +1,29 @@
+{
+    "name": "pluginxchange/api",
+    "description": "Mini reseller marketplace API (PHP 8 + MySQL + JSON)",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "ext-pdo": "*"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^11.5",
+        "squizlabs/php_codesniffer": "^3.10"
+    },
+    "scripts": {
+        "lint": "phpcs",
+        "analyse": "phpstan analyse --memory-limit=512M",
+        "test": "phpunit"
+    },
+    "autoload": {
+        "psr-4": { "PluginXchange\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "PluginXchange\\Tests\\": "tests/" }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
