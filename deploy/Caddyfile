@@ -1,0 +1,5 @@
+# SITE_ADDRESS comes from the environment. ":80" (the default) serves plain HTTP on any address, a domain name
+# such as api.example.com makes Caddy get and renew a Let's Encrypt certificate by itself.
+{$SITE_ADDRESS::80} {
+	reverse_proxy app:8080
+}

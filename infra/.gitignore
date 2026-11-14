@@ -1,0 +1,8 @@
+# Provider plugins, and the state file: it holds the generated passwords, so it must never be committed
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+terraform.tfvars
+*.auto.tfvars

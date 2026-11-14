@@ -58,6 +58,20 @@ jobs:
           dotnet-version: "8.0.x"
       - run: dotnet test tools/PluginXchange.sln
 
+  # No AWS access needed: this only checks that the Terraform is well-formed and the deploy scripts are sound
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive -diff
+        working-directory: infra
+      - run: terraform init -backend=false -input=false
+        working-directory: infra
+      - run: terraform validate
+        working-directory: infra
+      - run: shellcheck deploy/*.sh
+
   # Starts the API on PHP's built-in server (10 workers) and runs the .NET load test against it
   loadtest:
     runs-on: ubuntu-latest

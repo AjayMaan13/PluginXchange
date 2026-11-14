@@ -142,9 +142,10 @@ Pushing a tag starts `.github/workflows/deploy.yml`:
 | `build-and-push` | builds the production image and pushes it to GitHub Container Registry as `ghcr.io/<owner>/<repo>:v0.1.0` and `:sha-<commit>` (lowercase) |
 | `smoke-test` | starts that exact image (by digest) next to a MySQL service, checks it runs as non-root without dev files, then runs the .NET `smoke` command and a short `loadtest` against it |
 | `promote-latest` | only if the smoke test passed: points `:latest` at the image |
-| `deploy` | waits for approval on the `production` environment, then deploys (the AWS deploy is added in Phase 9) |
+| `deploy` | waits for approval on the `production` environment, then deploys to the EC2 instance through SSM and smoke-tests the public URL (skipped until the AWS variables are set, see [docs/deploy-aws.md](docs/deploy-aws.md)) |
 
 One-time setup in GitHub: Settings > Environments > New environment > `production`, then add yourself under *Required reviewers*.
+The AWS side (ECR, EC2, IAM roles, budget, backups) is created with Terraform: see [docs/deploy-aws.md](docs/deploy-aws.md).
 The workflow can also be started by hand from the Actions tab; that publishes only the `sha-` tag and skips `promote-latest` and `deploy`.
 
 Run a published image yourself (the database must already have the schema; see `database/schema.sql`):
@@ -167,6 +168,7 @@ docker buildx imagetools create -t ghcr.io/<owner>/<repo>:latest ghcr.io/<owner>
 |---|---|
 | [docs/api.md](docs/api.md) | every endpoint with examples, validation rules and error codes |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | seven support scenarios: symptom, how to investigate, fix |
+| [docs/deploy-aws.md](docs/deploy-aws.md) | the AWS deployment: Terraform, one-time setup, how a deploy works, rollback, cost |
 | [docs/test-cases.md](docs/test-cases.md) | the test case table |
 | [docs/adr/](docs/adr/) | design decisions: no framework, SKIP LOCKED key allocation, money as integer cents, API-key hashing |
 
@@ -188,5 +190,7 @@ docker/              Dockerfile (dev and production targets), nginx, php-fpm and
 .github/workflows/   ci.yml (every push) and deploy.yml (release on a v* tag)
 tests/               PHPUnit: Unit/ and Integration/, fixtures/
 tools/               .NET client, CLI and tests
-docs/                API reference, troubleshooting, test cases, ADRs
+deploy/              what runs on the AWS instance: compose file, Caddyfile, deploy and backup scripts
+infra/               Terraform for the AWS deployment
+docs/                API reference, troubleshooting, test cases, ADRs, AWS deployment
 ```

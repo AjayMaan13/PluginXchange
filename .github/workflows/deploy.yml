@@ -2,6 +2,9 @@ name: Release
 
 # Push a tag like v0.1.0 (or run the workflow by hand) to build the production image, publish it to GitHub Container
 # Registry, smoke-test it, and only then move `latest` to it.
+#
+# On a tag push, once the AWS repository variables are set (see docs/deploy-aws.md), the same image is also pushed to ECR
+# and, after approval on the `production` environment, deployed to the EC2 instance and smoke-tested at its public URL.
 on:
   push:
     tags: ["v*"]
@@ -14,8 +17,13 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # lets the job ask AWS for short-lived credentials (OIDC)
     outputs:
       image-ref: ${{ steps.name.outputs.image }}@${{ steps.push.outputs.digest }}
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,12 +40,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Only on release tags, and only once the AWS variables exist: also push to ECR (the instance pulls from there)
+      - name: AWS credentials (push role)
+        id: aws
+        if: ${{ vars.AWS_PUSH_ROLE_ARN != '' && startsWith(github.ref, 'refs/tags/v') }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr
+        if: ${{ steps.aws.outcome == 'success' }}
+        uses: aws-actions/amazon-ecr-login@v2
+
       # A tag push gets the version tag (v0.1.0) and the commit tag (sha-abc1234). A manual run gets only the commit tag.
       - name: Tags and labels
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.name.outputs.image }}
+          images: |
+            ${{ steps.name.outputs.image }}
+            ${{ steps.ecr.outcome == 'success' && vars.ECR_REPOSITORY_URL || '' }}
           tags: |
             type=ref,event=tag
             type=sha
@@ -150,12 +174,88 @@ jobs:
           IMAGE="${{ needs.build-and-push.outputs.image-ref }}"
           docker buildx imagetools create -t "${IMAGE%@*}:latest" "$IMAGE"
 
-  # Waits for approval when the `production` environment has required reviewers (Settings > Environments).
-  # Phase 9 replaces the echo with the AWS deploy.
+  # Deploys the image that passed the smoke test to the EC2 instance. Waits for approval when the `production` environment
+  # has required reviewers. Skipped until the AWS repository variables are set.
   deploy:
     runs-on: ubuntu-latest
     needs: [build-and-push, smoke-test]
-    if: startsWith(github.ref, 'refs/tags/v')
-    environment: production
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      DEPLOY_BUCKET: ${{ vars.DEPLOY_BUCKET }}
+      INSTANCE_ID: ${{ vars.INSTANCE_ID }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+      # The digest, so the instance runs exactly the bytes the smoke test ran
+      IMAGE: ${{ vars.ECR_REPOSITORY_URL }}@${{ needs.build-and-push.outputs.digest }}
     steps:
-      - run: echo "Would deploy ${{ needs.build-and-push.outputs.image-ref }} to production (added in Phase 9)"
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Ship the deploy files to S3
+        run: |
+          aws s3 cp deploy/docker-compose.prod.yml "s3://$DEPLOY_BUCKET/deploy/docker-compose.prod.yml" --only-show-errors
+          aws s3 cp deploy/Caddyfile "s3://$DEPLOY_BUCKET/deploy/Caddyfile" --only-show-errors
+          aws s3 cp deploy/backup.sh "s3://$DEPLOY_BUCKET/deploy/backup.sh" --only-show-errors
+          aws s3 cp deploy/deploy.sh "s3://$DEPLOY_BUCKET/deploy/deploy.sh" --only-show-errors
+          aws s3 cp database/schema.sql "s3://$DEPLOY_BUCKET/deploy/schema.sql" --only-show-errors
+
+      # Runs deploy/deploy.sh on the instance through SSM (no SSH). The script rolls back by itself when the new
+      # version does not become healthy, and then exits non-zero, which fails this step.
+      - name: Deploy on the instance
+        run: |
+          cmd="aws s3 cp s3://$DEPLOY_BUCKET/deploy/deploy.sh /tmp/deploy.sh --region $AWS_REGION --only-show-errors"
+          cmd="$cmd && IMAGE=$IMAGE BUCKET=$DEPLOY_BUCKET AWS_REGION=$AWS_REGION bash /tmp/deploy.sh"
+          command_id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy $GITHUB_REF_NAME" \
+            --timeout-seconds 900 \
+            --parameters "$(jq -cn --arg c "$cmd" '{commands: [$c]}')" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $command_id"
+
+          # The waiter fails on a failed command, so ignore its result and read the real status
+          aws ssm wait command-executed --command-id "$command_id" --instance-id "$INSTANCE_ID" || true
+          status=$(aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query Status --output text)
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text
+          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+            --query StandardErrorContent --output text >&2
+          echo "deploy status: $status"
+          [ "$status" = "Success" ]
+
+      - name: Health check at the public URL
+        run: curl -fsS --retry 10 --retry-delay 3 --retry-connrefused "$PUBLIC_URL/health"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # The production database starts empty, so --provision creates a reseller and a product to place one order with
+      - name: Smoke test the public URL
+        run: |
+          admin_key=$(aws ssm get-parameter --name /pluginxchange/admin_api_key --with-decryption \
+            --query Parameter.Value --output text)
+          echo "::add-mask::$admin_key"
+          PXC_ADMIN_KEY="$admin_key" dotnet run --project tools/PluginXchange.Cli -- smoke \
+            --base-url "$PUBLIC_URL" --provision yes
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed"
+            echo
+            echo "- image: \`$IMAGE\`"
+            echo "- url: $PUBLIC_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

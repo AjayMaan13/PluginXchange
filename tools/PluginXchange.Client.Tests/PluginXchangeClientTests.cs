@@ -85,6 +85,21 @@ public class PluginXchangeClientTests
     }
 
     [Fact]
+    public async Task CreatesAResellerAndReadsTheOneTimeKey()
+    {
+        var json = """{"data":{"id":3,"name":"Shop","country":"CA","api_key":"abc123"}}""";
+        var handler = new FakeHandler().Respond(HttpStatusCode.Created, json);
+
+        var reseller = await ClientFor(handler).CreateResellerAsync("Shop", "CA");
+
+        Assert.Equal(3, reseller.Id);
+        Assert.Equal("abc123", reseller.ApiKey);
+        var sent = JsonDocument.Parse(handler.Requests.Single().Body).RootElement;
+        Assert.Equal("Shop", sent.GetProperty("name").GetString());
+        Assert.Equal("CA", sent.GetProperty("country").GetString());
+    }
+
+    [Fact]
     public async Task SendsTheApiKeyHeaderOnEveryRequest()
     {
         var handler = new FakeHandler().Respond(HttpStatusCode.OK, OrderJson).Respond(HttpStatusCode.OK, OrderJson);

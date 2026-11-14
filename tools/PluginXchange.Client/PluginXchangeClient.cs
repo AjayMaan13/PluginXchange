@@ -80,6 +80,16 @@ public sealed class PluginXchangeClient
             () => new HttpRequestMessage(HttpMethod.Get, $"/api/v1/support/orders/{orderId}/trace"),
             ct)).Data;
 
+    /// <summary>Admin only: creates a reseller. The API key in the result is shown only once.</summary>
+    public async Task<CreatedReseller> CreateResellerAsync(string name, string country, CancellationToken ct = default)
+    {
+        var body = new ResellerRequest(name, country);
+
+        return (await SendAsync<Envelope<CreatedReseller>>(
+            () => new HttpRequestMessage(HttpMethod.Post, "/api/v1/resellers") { Content = JsonContent.Create(body, options: Json) },
+            ct)).Data;
+    }
+
     /// <summary>Admin only: bulk-load a vendor's catalog.</summary>
     public async Task<ImportResult> ImportCatalogAsync(
         string vendor,
