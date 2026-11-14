@@ -62,17 +62,19 @@ pluginxchange/
 
 ## Phase 0: Project setup and green CI (about 2 hours)
 
+> **Status:** done, except branch protection on `main`, which is a GitHub setting to check by hand.
+
 **Goal:** an empty-but-working project whose pipeline is green from day one.
 
 **Tasks**
-- [ ] Create repo `pluginxchange`, add `.gitignore`, `.env.example`, MIT license, README stub
-- [ ] `composer init`; add dev dependencies: `phpunit/phpunit`, `squizlabs/php_codesniffer`, `phpstan/phpstan`
-- [ ] `phpcs.xml` (PSR-12, scan `src` and `tests`), `phpstan.neon` (level 5, scan `src`)
-- [ ] `docker/Dockerfile` (php:8.3-fpm + pdo_mysql + composer), `nginx.conf`, `docker-compose.yml` with `app`, `web`, `db` (mysql:8.0)
-- [ ] `public/index.php` returning `{"status":"ok"}` for now
-- [ ] `Makefile`: `up`, `down`, `test`, `lint`, `seed`, `integrity`
-- [ ] One trivial passing PHPUnit test
-- [ ] `.github/workflows/ci.yml` (below)
+- [x] Create repo `pluginxchange`, add `.gitignore`, `.env.example`, MIT license, README stub
+- [x] `composer init`; add dev dependencies: `phpunit/phpunit`, `squizlabs/php_codesniffer`, `phpstan/phpstan`
+- [x] `phpcs.xml` (PSR-12, scan `src` and `tests`), `phpstan.neon` (level 5, scan `src`)
+- [x] `docker/Dockerfile` (php:8.3-fpm + pdo_mysql + composer), `nginx.conf`, `docker-compose.yml` with `app`, `web`, `db` (mysql:8.0)
+- [x] `public/index.php` returning `{"status":"ok"}` for now
+- [x] `Makefile`: `up`, `down`, `test`, `lint`, `seed`, `integrity`
+- [x] One trivial passing PHPUnit test
+- [x] `.github/workflows/ci.yml` (below)
 - [ ] Branch protection on `main`: require CI to pass; add a PR template (tests added, docs updated, no secrets)
 
 **CI workflow (`.github/workflows/ci.yml`)**
@@ -220,12 +222,12 @@ CREATE TABLE audit_log (
 Note: `license_keys.order_id` has no FK on purpose (avoids a circular dependency); the integrity script checks it instead.
 
 **Tasks**
-- [ ] Write `schema.sql`; mount into the db container's `/docker-entrypoint-initdb.d`
-- [ ] `seed.sql`: 3 vendors, about 12 products, a few hundred keys, 2 resellers (store hashed keys; document the plain keys in the README for local use only)
-- [ ] `src/Database.php`: PDO singleton from env vars, `ERRMODE_EXCEPTION`, `FETCH_ASSOC`, `EMULATE_PREPARES=false`
-- [ ] `GET /health` pinging the DB (`SELECT 1`)
-- [ ] First integration test: connects to the test DB and checks the tables exist
-- [ ] ADR 0001: no framework (reason: show the fundamentals, small scope)
+- [x] Write `schema.sql`; mount into the db container's `/docker-entrypoint-initdb.d`
+- [x] `seed.sql`: 3 vendors, about 12 products, a few hundred keys, 2 resellers (store hashed keys; document the plain keys in the README for local use only)
+- [x] `src/Database.php`: PDO singleton from env vars, `ERRMODE_EXCEPTION`, `FETCH_ASSOC`, `EMULATE_PREPARES=false`
+- [x] `GET /health` pinging the DB (`SELECT 1`)
+- [x] First integration test: connects to the test DB and checks the tables exist
+- [x] ADR 0001: no framework (reason: show the fundamentals, small scope)
 
 **Exit criteria**
 - Fresh `docker compose up` creates the schema and seed data
@@ -241,14 +243,14 @@ Note: `license_keys.order_id` has no FK on purpose (avoids a circular dependency
 **Goal:** a small router and consistent JSON responses, plus the read-only catalog.
 
 **Tasks**
-- [ ] `Router` (method + path pattern with `{id}`), `Request` (parsed JSON body, headers, query), `JsonResponse`
-- [ ] Error handler middleware: all errors return the standard format, never a PHP stack trace; log details server-side
-- [ ] Request ID middleware (16 hex chars), added to every response header and error body
-- [ ] Auth middleware: SHA-256 the `X-API-Key`, look up the reseller, or compare to the admin key; set role on the request
-- [ ] `GET /products` (filters `category`, `vendor_id`; pagination `page`, `per_page` capped at 100)
-- [ ] `GET /products/{id}` including `available_keys` count
-- [ ] `POST /resellers` (admin only): validate, generate a random 32-byte key, store only its hash, return the key once
-- [ ] Tests: router matching and 404/405, auth (missing, bad, good key), pagination, filters, bad JSON
+- [x] `Router` (method + path pattern with `{id}`), `Request` (parsed JSON body, headers, query), `JsonResponse`
+- [x] Error handler middleware: all errors return the standard format, never a PHP stack trace; log details server-side
+- [x] Request ID middleware (16 hex chars), added to every response header and error body
+- [x] Auth middleware: SHA-256 the `X-API-Key`, look up the reseller, or compare to the admin key; set role on the request
+- [x] `GET /products` (filters `category`, `vendor_id`; pagination `page`, `per_page` capped at 100)
+- [x] `GET /products/{id}` including `available_keys` count
+- [x] `POST /resellers` (admin only): validate, generate a random 32-byte key, store only its hash, return the key once
+- [x] Tests: router matching and 404/405, auth (missing, bad, good key), pagination, filters, bad JSON
 
 **Error format (used everywhere)**
 ```json
@@ -356,9 +358,9 @@ try {
 ```
 
 **Tasks**
-- [ ] Implement the three endpoints with repository methods and tests
-- [ ] Make sure every state change in Phases 3-4 writes an audit event with the request ID
-- [ ] Start `docs/troubleshooting.md` with the first scenario: "order shows fulfilled but the reseller has no key" (symptom, trace call, SQL to check, fix)
+- [x] Implement the three endpoints with repository methods and tests
+- [x] Make sure every state change in Phases 3-4 writes an audit event with the request ID
+- [x] Start `docs/troubleshooting.md` with the first scenario: "order shows fulfilled but the reseller has no key" (symptom, trace call, SQL to check, fix)
 
 **Exit criteria**
 - Cancel, history, and trace work and are tested (about 8 new tests)
@@ -402,9 +404,9 @@ try {
 - Create the vendor if the name is new
 
 **Tasks**
-- [ ] `ImportValidator` (pure, unit-testable), `ImportService`, controller
-- [ ] Sample files in `tests/fixtures/`: valid, partially bad, duplicate keys, huge, malformed JSON
-- [ ] Tests: new vendor, update existing, partial rejection, idempotent re-run, malformed JSON, oversize file
+- [x] `ImportValidator` (pure, unit-testable), `ImportService`, controller
+- [x] Sample files in `tests/fixtures/`: valid, partially bad, duplicate keys, huge, malformed JSON
+- [x] Tests: new vendor, update existing, partial rejection, idempotent re-run, malformed JSON, oversize file
 
 **Exit criteria**
 - Importing the valid fixture twice gives identical DB state the second time
@@ -420,23 +422,23 @@ try {
 **Goal:** prove it's correct, and document the proof.
 
 **Tasks**
-- [ ] **.NET tool (`tools/`, about 3-4 hours)**
+- [x] **.NET tool (`tools/`, about 3-4 hours)**
   - `PluginXchange.Client`: class library with a typed `HttpClient` wrapper (`PlaceOrderAsync`, `GetProductAsync`, `GetTraceAsync`), `System.Text.Json` models matching the API's request/response/error JSON, and the `X-API-Key` header set from config
   - `PluginXchange.Cli`: console app with two commands
     - `loadtest --orders 50 --product 12 --qty 3 --runs 10`: fires N parallel order requests with `Task.WhenAll`, each with a unique idempotency key, against a product with M keys (e.g. 100). It asserts: no key string appears twice across all responses, fulfilled + failed orders equals N, and the number of keys handed out never exceeds M. It also replays one idempotency key twice and asserts the same keys come back. It prints a summary table (fulfilled, failed, p50/p95 latency) and exits non-zero on any violation.
     - `smoke --base-url https://...`: health, list products, place and fetch one order; exits non-zero on failure. Phase 8 and 9 call this in the pipeline instead of raw curl.
   - `PluginXchange.Client.Tests` (xUnit): JSON model parsing for success and error bodies, error-to-exception mapping (401, 409, 422), and a fake `HttpMessageHandler` test for retry/idempotency behavior. Aim for 8-10 tests.
   - After each load test run, run `make integrity` to check the database side (the tool can only see what the API returns).
-- [ ] **`database/integrity-checks.sql`** with queries for:
+- [x] **`database/integrity-checks.sql`** with queries for:
   - sold keys with no matching order
   - fulfilled orders where key count != quantity
   - orders where `total_cents` != `quantity * unit_price_cents`
   - keys marked `sold` on cancelled orders (should be `revoked`)
   - `make integrity` runs them and fails if any returns rows
-- [ ] Run the integrity script after the concurrency test and after an import
-- [ ] **`docs/test-cases.md`**: a table with columns ID, Area, Scenario, Steps, Expected, Automated (Y/N), Status. Target 30+ rows covering everything above.
-- [ ] Coverage report; add tests until Services and Repositories are at or above 70%
-- [ ] Fix any real bug the concurrency or integrity checks uncover and write it up in the troubleshooting doc (this makes a strong interview story)
+- [x] Run the integrity script after the concurrency test and after an import
+- [x] **`docs/test-cases.md`**: a table with columns ID, Area, Scenario, Steps, Expected, Automated (Y/N), Status. Target 30+ rows covering everything above.
+- [x] Coverage report; add tests until Services and Repositories are at or above 70%
+- [x] Fix any real bug the concurrency or integrity checks uncover and write it up in the troubleshooting doc (this makes a strong interview story)
 
 **Exit criteria**
 - 25+ automated tests passing in CI
@@ -453,13 +455,13 @@ try {
 **Goal:** make it read like a team project.
 
 **Tasks**
-- [ ] Get `phpcs` and `phpstan` fully clean (try raising PHPStan one level)
-- [ ] Self-review every PR diff with a checklist: input validation, prepared statements only, no secrets, error paths tested
-- [ ] **README:** what it is, architecture sketch, quickstart (`docker compose up`), sample curl calls for each endpoint, how to run tests/lint/integrity, CI badge
-- [ ] **`docs/api.md`:** every endpoint with request/response examples and error codes
-- [ ] **`docs/troubleshooting.md`:** 4-5 scenarios (symptom, how to investigate with the trace endpoint and SQL, fix). Ideas: fulfilled order with missing key; 409 on retry; import rejected rows; 401 vs 403 confusion; DB connection failure on startup.
-- [ ] ADR 0003 (money as integer cents) and ADR 0004 (API-key hashing)
-- [ ] Optional: a Postman or `.http` collection in the repo
+- [x] Get `phpcs` and `phpstan` fully clean (try raising PHPStan one level)
+- [x] Self-review every PR diff with a checklist: input validation, prepared statements only, no secrets, error paths tested
+- [x] **README:** what it is, architecture sketch, quickstart (`docker compose up`), sample curl calls for each endpoint, how to run tests/lint/integrity, CI badge
+- [x] **`docs/api.md`:** every endpoint with request/response examples and error codes
+- [x] **`docs/troubleshooting.md`:** 4-5 scenarios (symptom, how to investigate with the trace endpoint and SQL, fix). Ideas: fulfilled order with missing key; 409 on retry; import rejected rows; 401 vs 403 confusion; DB connection failure on startup.
+- [x] ADR 0003 (money as integer cents) and ADR 0004 (API-key hashing)
+- [x] Optional: a Postman or `.http` collection in the repo
 
 **Exit criteria**
 - Someone can clone the repo, run one command, and call every endpoint using only the README
@@ -471,14 +473,16 @@ try {
 
 ## Phase 8: Continuous delivery with GitHub Container Registry (about 2 hours)
 
+> **Status:** written, linted and rehearsed locally (the image, smoke test and load test against it). The first tagged run on GitHub is still to do, and the `production` environment with required reviewers has to be created in GitHub settings (unticked below for that reason).
+
 **Goal:** a release pipeline that builds, publishes, and smoke-tests an image. This is also the foundation for AWS.
 
 **Tasks**
-- [ ] Production Dockerfile stage: `composer install --no-dev --optimize-autoloader`, non-root user, no dev files
-- [ ] `.github/workflows/deploy.yml`: triggers on tag `v*` (and `workflow_dispatch`); jobs: build image, push to GHCR tagged with the version and `latest`, then run a smoke test
-- [ ] Smoke test job: start the new image with a MySQL service container, wait for `/health`, then run the .NET `smoke` command (health, list products with the seeded key, place and fetch one order)
+- [x] Production Dockerfile stage: `composer install --no-dev --optimize-autoloader`, non-root user, no dev files
+- [x] `.github/workflows/deploy.yml`: triggers on tag `v*` (and `workflow_dispatch`); jobs: build image, push to GHCR tagged with the version and `latest`, then run a smoke test
+- [x] Smoke test job: start the new image with a MySQL service container, wait for `/health`, then run the .NET `smoke` command (health, list products with the seeded key, place and fetch one order)
 - [ ] Use a GitHub Environment named `production` with required approval for the deploy step (used in Phase 9)
-- [ ] Document the rollback: redeploy the previous image tag
+- [x] Document the rollback: redeploy the previous image tag
 
 **Skeleton**
 ```yaml
@@ -522,19 +526,21 @@ jobs:
 
 ## Phase 9 (optional): AWS Level 1, single VM (about 3-4 hours)
 
+> **Status:** done as code, with Terraform instead of console clicks (see `docs/deploy-aws.md`). `terraform validate`, a Trivy scan, shellcheck and a local rehearsal of `deploy.sh` (good deploy, bad image, broken compose file, rollback) passed. **Not applied to a real AWS account yet**, so the exit criteria below are untested and no deploy time or cost has been measured.
+
 **Goal:** a live deployment on AWS driven by the pipeline. Cheapest option that honestly counts as "cloud".
 
 **Steps**
-- [ ] **Before anything else:** create an AWS Budget with an email alert
-- [ ] Create an ECR repository; change the release workflow to push there as well (or instead)
-- [ ] Launch one small EC2 instance (or Lightsail) with Docker and Docker Compose installed; attach an instance role with ECR pull permission and SSM access
-- [ ] Security group: 80/443 open; SSH closed (use SSM Session Manager) or open to your IP only
-- [ ] Production `docker-compose.prod.yml` (app, web, db with a named volume on EBS); secrets via an env file on the host or SSM Parameter Store, never in Git
-- [ ] GitHub OIDC: create an IAM role trusted for your repo and the `production` environment; permissions limited to ECR push and SSM SendCommand on this instance. No long-lived AWS keys in GitHub.
-- [ ] Extend `deploy.yml`: after the image push, job `deploy` (environment `production`, with approval) assumes the role, then uses SSM `send-command` to run `docker compose pull && docker compose up -d`, then `curl -f` the public `/health`
-- [ ] TLS: Caddy or nginx + Let's Encrypt if you have a domain; otherwise HTTP on the public IP for the demo
-- [ ] Nightly `mysqldump` cron to an S3 bucket (with a lifecycle rule to expire old dumps)
-- [ ] `docs/deploy-aws.md`: architecture diagram, one-time setup, how a deploy works, rollback steps, monthly cost estimate
+- [x] **Before anything else:** create an AWS Budget with an email alert
+- [x] Create an ECR repository; change the release workflow to push there as well (or instead)
+- [x] Launch one small EC2 instance (or Lightsail) with Docker and Docker Compose installed; attach an instance role with ECR pull permission and SSM access
+- [x] Security group: 80/443 open; SSH closed (use SSM Session Manager) or open to your IP only
+- [x] Production `docker-compose.prod.yml` (app, web, db with a named volume on EBS); secrets via an env file on the host or SSM Parameter Store, never in Git
+- [x] GitHub OIDC: create an IAM role trusted for your repo and the `production` environment; permissions limited to ECR push and SSM SendCommand on this instance. No long-lived AWS keys in GitHub.
+- [x] Extend `deploy.yml`: after the image push, job `deploy` (environment `production`, with approval) assumes the role, then uses SSM `send-command` to run `docker compose pull && docker compose up -d`, then `curl -f` the public `/health`
+- [x] TLS: Caddy or nginx + Let's Encrypt if you have a domain; otherwise HTTP on the public IP for the demo
+- [x] Nightly `mysqldump` cron to an S3 bucket (with a lifecycle rule to expire old dumps)
+- [x] `docs/deploy-aws.md`: architecture diagram, one-time setup, how a deploy works, rollback steps, monthly cost estimate
 
 **Exit criteria**
 - Tagging a release deploys to the instance and the smoke test passes against the public URL
@@ -545,6 +551,8 @@ jobs:
 ---
 
 ## Phase 10 (optional stretch): AWS Level 2, managed services (about 4-6 hours)
+
+> **Status:** skipped (optional stretch).
 
 **Goal:** closer to a production layout. Do this only if Phase 9 is done and you have time.
 
@@ -590,13 +598,15 @@ If time is tight, the minimum presentable version is Phases 0-3 + 7 (README) + 8
 
 ---
 
-## Resume bullets (fill in real numbers only)
+## Resume bullets (real numbers, measured on 2026-11-13)
 
-- Built a PHP 8 / MySQL REST API with **[N]** JSON endpoints for a software-license reseller marketplace, covered by **[N]** PHPUnit tests at **[N]%** coverage.
-- Implemented transactional license-key allocation using row-level locking; verified **0** duplicate keys across **[N]** concurrent orders over **[N]** test runs.
-- Designed a JSON catalog import with per-row validation that processed **[N]** products / **[N]** keys in **[N]** s and returned structured reports for **[N]** rejected rows.
-- Built a C# (.NET) load-testing client that ran **[N]** parallel orders over **[N]** runs against the PHP API (p95 latency **[N]** ms) and confirmed **0** duplicate license keys, with **[N]** xUnit tests.
-- Set up GitHub Actions CI/CD with **[N]** automated checks (lint, static analysis, tests, image build, smoke test), releasing a container image in **[N]** min; deployed to AWS **[EC2 / ECS + RDS]** with an automated health-check gate.
+- Built a PHP 8.3 / MySQL REST API with **9** JSON endpoints for a software-license reseller marketplace, covered by **80** PHPUnit tests (385 assertions) at **96%** line coverage, plus **13** xUnit tests for its C# client.
+- Implemented transactional license-key allocation using row-level locking (`FOR UPDATE SKIP LOCKED`) and idempotency keys; verified **0** duplicate keys across **3,000** parallel orders in **40** runs against the release image, plus same-key retry storms that always produced exactly one order.
+- Designed a JSON catalog import with per-row validation that processed **500** products / **10,000** keys in **1.0** s (**0.27** s for an unchanged re-run) and returned structured reports for rejected rows (**5** on the bad fixture).
+- Built a C# (.NET 8) load-testing client that ran **50** parallel orders per run over **20** runs against the PHP API (p95 latency **83** ms) and confirmed **0** duplicate license keys; it found a real bug (false out-of-stock under parallel load, about 1 run in 10) that was fixed with a bounded retry.
+- Set up GitHub Actions CI/CD with **11** automated checks (composer validate, phpcs, phpstan, PHPUnit with coverage, database integrity checks, .NET tests, terraform fmt and validate, shellcheck, a load test, image build) and a release workflow that builds, smoke-tests and publishes a container image to GHCR; defined the AWS deployment in Terraform (EC2, ECR, OIDC roles, S3 backups) with an automated health-check gate and rollback.
+
+Left out on purpose until they are true: "released in N minutes" (the release workflow has not run on a tag yet) and "deployed to AWS" (the Terraform is validated but not applied). Add them after you have run both.
 
 ## Interview talking points
 
