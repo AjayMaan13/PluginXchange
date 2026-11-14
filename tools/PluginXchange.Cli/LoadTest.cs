@@ -73,7 +73,7 @@ internal static class LoadTest
         LoadTestConfig config,
         int run)
     {
-        var productId = config.Product ?? await CreateProductAsync(admin, config.Keys);
+        var productId = config.Product ?? await Provision.CreateProductAsync(admin, config.Keys);
         var tag = Guid.NewGuid().ToString("N")[..8];
         var violations = new List<string>();
 
@@ -225,38 +225,6 @@ internal static class LoadTest
         catch (Exception e) when (e is ApiException or HttpRequestException or TaskCanceledException)
         {
             return new Outcome(key, null, false, e.Message, watch.Elapsed.TotalMilliseconds);
-        }
-    }
-
-    /// <summary>Imports a one-product vendor with fresh keys, then finds the product's id in the catalog.</summary>
-    private static async Task<int> CreateProductAsync(PluginXchangeClient admin, int keyCount)
-    {
-        var tag = Guid.NewGuid().ToString("N")[..8];
-        var sku = $"LT-{tag}";
-        var keys = Enumerable.Range(1, keyCount).Select(n => $"LT{tag}-{n:D5}").ToList();
-
-        var result = await admin.ImportCatalogAsync(
-            $"Load Test {tag}",
-            [new ImportProduct(sku, "Load test product", "other", 100, keys)]);
-        if (result.ProductsCreated != 1 || result.KeysAdded != keyCount)
-        {
-            throw new InvalidOperationException(
-                $"Could not create the load test product: {result.ProductsCreated} created, {result.KeysAdded} keys, "
-                + $"{string.Join("; ", result.Rejected.SelectMany(r => r.Errors))}");
-        }
-
-        for (var page = 1; ; page++)
-        {
-            var products = await admin.ListProductsAsync(page, 100);
-            if (products.Items.FirstOrDefault(p => p.Sku == sku) is { } found)
-            {
-                return found.Id;
-            }
-
-            if (page * 100 >= products.Meta.Total)
-            {
-                throw new InvalidOperationException($"Imported product {sku} is not in the catalog");
-            }
         }
     }
 

@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) and fill in.
+budget_email = "you@example.com"
+
+# region                      = "us-east-1"
+# github_repo                 = "AjayMaan13/PluginXchange"
+# instance_type               = "t3.small"
+# domain                      = "api.example.com"   # optional: automatic HTTPS (point its A record at the public_ip output)
+# create_github_oidc_provider = false               # if the account already has a GitHub OIDC provider

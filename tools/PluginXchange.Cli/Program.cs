@@ -8,6 +8,7 @@ const string Usage = """
       loadtest   fire parallel orders and check no key is sold twice
                  --orders 50 --qty 3 --runs 10 [--product ID | --keys 100]
       smoke      health, list products, place and fetch one order [--product ID]
+                 --provision yes  first create a reseller and a product with the admin key (for an empty database)
 
     Common options (or environment variables):
       --base-url  PXC_BASE_URL   default http://localhost:8080
@@ -56,7 +57,20 @@ try
             return await LoadTest.RunAsync(reseller, admin, config);
 
         case "smoke":
-            return await Smoke.RunAsync(reseller, options.ContainsKey("product") ? Args.GetInt(options, "product", 0) : null);
+            var smokeClient = reseller;
+            int? smokeProduct = options.ContainsKey("product") ? Args.GetInt(options, "product", 0) : null;
+            if (options.ContainsKey("provision"))
+            {
+                // An empty database (production) has no reseller or products: create a reseller and a product with the admin key
+                var created = await admin.CreateResellerAsync($"Smoke test {DateTime.UtcNow:yyyy-MM-dd HH:mm}", "CA");
+                smokeProduct = await Provision.CreateProductAsync(admin, 5, "Smoke Test", "SMOKE");
+                smokeClient = new PluginXchangeClient(
+                    new HttpClient { Timeout = TimeSpan.FromSeconds(60) },
+                    new ClientOptions { BaseUrl = baseUrl, ApiKey = created.ApiKey });
+                Console.WriteLine($"provisioned reseller #{created.Id} and product #{smokeProduct}");
+            }
+
+            return await Smoke.RunAsync(smokeClient, smokeProduct);
 
         default:
             Console.Error.WriteLine($"Unknown command '{args[0]}'");

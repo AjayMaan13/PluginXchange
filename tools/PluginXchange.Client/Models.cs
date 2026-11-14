@@ -58,6 +58,8 @@ public sealed record ImportProduct(string Sku, string Name, string Category, int
 
 public sealed record ImportRejection(int Index, string? Sku, IReadOnlyList<string> Errors);
 
+public sealed record CreatedReseller(int Id, string Name, string Country, string ApiKey);
+
 public sealed record ImportResult(
     int ProductsCreated,
     int ProductsUpdated,
@@ -74,5 +76,7 @@ internal sealed record ErrorEnvelope(ErrorBody Error);
 internal sealed record ErrorBody(string Code, string Message, string? RequestId);
 
 internal sealed record OrderRequest(int ProductId, int Quantity, string? IdempotencyKey);
+
+internal sealed record ResellerRequest(string Name, string Country);
 
 internal sealed record ImportRequest(string Vendor, IReadOnlyList<ImportProduct> Products);

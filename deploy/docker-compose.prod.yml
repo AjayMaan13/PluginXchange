@@ -1,0 +1,57 @@
+# Production stack on the EC2 instance. deploy.sh copies this to /opt/pluginxchange/docker-compose.yml and writes
+# the .env it reads (image and secrets, from SSM Parameter Store). Nothing secret is in this file or in Git.
+# Caddy and MySQL come from AWS's public mirror of the official Docker Hub images: Docker Hub limits anonymous pulls,
+# and servers on shared cloud addresses hit that limit.
+name: pluginxchange
+
+services:
+  app:
+    image: ${IMAGE}
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_NAME: pluginxchange
+      DB_USER: pluginxchange
+      DB_PASS: ${DB_PASSWORD}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # The only public entry point. Plain HTTP on the server's IP, or automatic HTTPS when SITE_ADDRESS is a domain name.
+  caddy:
+    image: public.ecr.aws/docker/library/caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - app
+
+  # Not published to the host: only the app can reach it. Data is in the dbdata volume (on the instance's EBS disk).
+  db:
+    image: public.ecr.aws/docker/library/mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: pluginxchange
+      MYSQL_USER: pluginxchange
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+      # Runs once, on the first start with an empty volume. No sample data in production.
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  dbdata:
+  caddy_data:

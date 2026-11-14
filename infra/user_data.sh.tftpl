@@ -1,0 +1,20 @@
+#!/bin/bash
+# First boot only: Docker and the Compose plugin. The application itself is installed and updated by deploy/deploy.sh,
+# which the release workflow runs through SSM on every release.
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+plugin_dir=/usr/local/lib/docker/cli-plugins
+mkdir -p "$plugin_dir"
+cd "$plugin_dir"
+base="https://github.com/docker/compose/releases/download/${compose_version}"
+curl -fsSL "$base/docker-compose-linux-x86_64" -o docker-compose
+curl -fsSL "$base/docker-compose-linux-x86_64.sha256" -o docker-compose.sha256
+# the published checksum file names the original file, so check the hash against the renamed one
+echo "$(cut -d' ' -f1 docker-compose.sha256)  docker-compose" | sha256sum -c -
+chmod +x docker-compose
+rm docker-compose.sha256
+
+mkdir -p /opt/pluginxchange
